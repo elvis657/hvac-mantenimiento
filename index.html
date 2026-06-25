@@ -1145,7 +1145,7 @@ var HVACApp = (function() {
             var err = document.getElementById('regError');
             if (!u || !p || !p2) { err.textContent='Complete todos los campos'; err.style.display=''; return; }
             if (p!==p2) { err.textContent='LAS CONTRASE\u00d1AS NO COINCIDEN'; err.style.display=''; return; }
-            if (p.length<4) { err.textContent='LA CONTRASE\u00d1A DEBE TENER AL MENOS 4 CARACTERES'; err.style.display=''; return; }
+            if (p.length<6) { err.textContent='LA CONTRASE\u00d1A DEBE TENER AL MENOS 6 CARACTERES'; err.style.display=''; return; }
             var role = document.getElementById('roleAdmin').classList.contains('active') ? 'admin' : 'tecnico';
             registerUser(u,p,role).then(function() {
                 err.style.display='none';
