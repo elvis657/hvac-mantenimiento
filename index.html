@@ -9,6 +9,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-storage-compat.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #f4f6f9; color: #1e293b; line-height: 1.6; }
@@ -505,6 +506,7 @@ var HVACApp = (function() {
     firebase.initializeApp(firebaseConfig);
     var authFirebase = firebase.auth();
     var dbFirebase = firebase.firestore();
+    var storageFirebase = firebase.storage();
 
     var currentUser = null;
 
@@ -583,6 +585,29 @@ var HVACApp = (function() {
     function showRegisterView() { document.getElementById('loginFormView').style.display='none'; document.getElementById('registerFormView').style.display=''; document.getElementById('regError').style.display='none'; document.getElementById('regUser').value=''; document.getElementById('regPass').value=''; document.getElementById('regPass2').value=''; }
 
     function isAdmin() { return currentUser && currentUser.role==='admin'; }
+
+    function subirFoto(base64, idx, callback) {
+        if (!base64) { callback(null, ''); return; }
+        var blob = dataURLToBlob(base64);
+        var path = 'fotos/' + (currentUser ? currentUser.uid : 'anon') + '/' + Date.now() + '_' + idx + '.jpg';
+        var ref = storageFirebase.ref().child(path);
+        ref.put(blob).then(function(snapshot) {
+            return snapshot.ref.getDownloadURL();
+        }).then(function(url) {
+            callback(null, url);
+        }).catch(function(err) {
+            callback(err.message, '');
+        });
+    }
+
+    function dataURLToBlob(dataURL) {
+        var parts = dataURL.split(',');
+        var mime = parts[0].match(/:(.*?);/)[1];
+        var bytes = atob(parts[1]);
+        var arr = new Uint8Array(bytes.length);
+        for (var i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+        return new Blob([arr], { type: mime });
+    }
 
     function guardarRegistro(registro, callback) {
         registro.createdBy = currentUser ? currentUser.email : 'unknown';
@@ -1188,28 +1213,43 @@ var HVACApp = (function() {
             if (!equipo) { alert('Ingrese el n\u00famero del equipo HVAC'); return; }
             if (!validarFotos()) { alert('Debe agregar 3 fotos en cada etapa'); return; }
 
-            var registro = {
-                sala: sala,
-                equipo: equipo,
-                descripciones: {
-                    antes: dA,
-                    durante: dD,
-                    despues: dDe
-                },
-                fotos: {
-                    antes: [fotosData.antes[0], fotosData.antes[1], fotosData.antes[2]],
-                    durante: [fotosData.durante[0], fotosData.durante[1], fotosData.durante[2]],
-                    despues: [fotosData.despues[0], fotosData.despues[1], fotosData.despues[2]]
-                },
-                condicion: cond || '',
-                fecha: new Date(fec).toISOString()
-            };
+            var fotosPorSubir = [
+                {phase:'antes', idx:0, data:fotosData.antes[0]},
+                {phase:'antes', idx:1, data:fotosData.antes[1]},
+                {phase:'antes', idx:2, data:fotosData.antes[2]},
+                {phase:'durante', idx:0, data:fotosData.durante[0]},
+                {phase:'durante', idx:1, data:fotosData.durante[1]},
+                {phase:'durante', idx:2, data:fotosData.durante[2]},
+                {phase:'despues', idx:0, data:fotosData.despues[0]},
+                {phase:'despues', idx:1, data:fotosData.despues[1]},
+                {phase:'despues', idx:2, data:fotosData.despues[2]}
+            ];
+            var fotosUrls = { antes:['','',''], durante:['','',''], despues:['','',''] };
+            var pendientes = fotosPorSubir.length;
+            var huboError = false;
 
-            guardarRegistro(registro, function(err) {
-                if (err) { alert('Error al guardar: ' + err); return; }
-                HVACApp.limpiar();
-                cargarYRenderizar();
-                alert('Registro guardado exitosamente');
+            fotosPorSubir.forEach(function(f) {
+                subirFoto(f.data, f.phase + '_' + f.idx, function(err, url) {
+                    if (huboError) return;
+                    if (err) { huboError = true; alert('Error al subir foto: ' + err); return; }
+                    fotosUrls[f.phase][f.idx] = url;
+                    pendientes--;
+                    if (pendientes === 0) {
+                        var registro = {
+                            sala: sala, equipo: equipo,
+                            descripciones: { antes: dA, durante: dD, despues: dDe },
+                            fotos: fotosUrls,
+                            condicion: cond || '',
+                            fecha: new Date(fec).toISOString()
+                        };
+                        guardarRegistro(registro, function(err2) {
+                            if (err2) { alert('Error al guardar: ' + err2); return; }
+                            HVACApp.limpiar();
+                            cargarYRenderizar();
+                            alert('Registro guardado exitosamente');
+                        });
+                    }
+                });
             });
         });
 
