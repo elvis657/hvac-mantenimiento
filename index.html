@@ -518,6 +518,7 @@ var HVACApp = (function() {
                 }
                 updateUserBar();
                 document.body.classList.add('logged-in');
+                cargarYRenderizar();
                 return true;
             });
         }).catch(function(err) {
@@ -535,6 +536,7 @@ var HVACApp = (function() {
                 currentUser = { email: cred.user.email, uid: cred.user.uid, role: role || 'tecnico' };
                 updateUserBar();
                 document.body.classList.add('logged-in');
+                cargarYRenderizar();
                 return true;
             });
         }).catch(function(err) {
@@ -568,6 +570,7 @@ var HVACApp = (function() {
                 }
                 updateUserBar();
                 document.body.classList.add('logged-in');
+                cargarYRenderizar();
             });
         } else {
             currentUser = null;
@@ -1157,17 +1160,8 @@ var HVACApp = (function() {
         document.getElementById('RoleTecnico').addEventListener('click', function() { this.classList.add('active'); document.getElementById('roleAdmin').classList.remove('active'); });
         document.getElementById('logoutBtn').addEventListener('click', logoutUser);
 
-        if (!currentUser) { return; }
-
-        var fechaInput = document.getElementById('fecha');
-        if (fechaInput) fechaInput.value = todayStr();
-
         initFotoSlots();
-
-        abrirDB(function(err) {
-            if (err) { alert('Error: No se pudo abrir la base de datos. Los datos no se guardar\u00e1n.'); return; }
-            cargarYRenderizar();
-        });
+        if (currentUser) cargarYRenderizar();
 
         document.getElementById('hvacForm').addEventListener('submit', function(e) {
             e.preventDefault();
