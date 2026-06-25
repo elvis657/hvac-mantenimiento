@@ -6,6 +6,9 @@
     <title>Z&R NEW TECHNOLOGY SAC - Registro de Mantenimiento HVAC</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #f4f6f9; color: #1e293b; line-height: 1.6; }
@@ -237,8 +240,8 @@
         </div>
         <div class="login-form" id="loginFormView">
             <div class="form-group">
-                <label>Usuario</label>
-                <input type="text" id="loginUser" placeholder="Ingrese su usuario">
+                <label>Correo Electr&oacute;nico</label>
+                <input type="email" id="loginUser" placeholder="Ingrese su correo">
             </div>
             <div class="form-group">
                 <label>CONTRASE&Ntilde;A</label>
@@ -250,8 +253,8 @@
         </div>
         <div class="login-form" id="registerFormView" style="display:none;">
             <div class="form-group">
-                <label>Nuevo usuario</label>
-                <input type="text" id="regUser" placeholder="Ingrese nombre de usuario">
+                <label>Correo Electr&oacute;nico</label>
+                <input type="email" id="regUser" placeholder="Ingrese su correo">
             </div>
             <div class="form-group">
                 <label>CONTRASE&Ntilde;A</label>
@@ -491,121 +494,136 @@
 var HVACApp = (function() {
     'use strict';
 
-    var DB_NAME = 'HVAC_Registros';
-    var DB_VERSION = 1;
-    var STORE_NAME = 'registros';
+    var firebaseConfig = {
+        apiKey: "AIzaSyCwrXJGQ-aDi5XaIuepl8u0D-kv7pv0TGk",
+        authDomain: "hvac-app-4a667.firebaseapp.com",
+        projectId: "hvac-app-4a667",
+        storageBucket: "hvac-app-4a667.firebasestorage.app",
+        messagingSenderId: "465142513790",
+        appId: "1:465142513790:web:a2010ac11bbeeb3be8182f"
+    };
+    firebase.initializeApp(firebaseConfig);
+    var authFirebase = firebase.auth();
+    var dbFirebase = firebase.firestore();
 
     var currentUser = null;
-    function getUsers() { return JSON.parse(localStorage.getItem('hvac_users')||'[]'); }
-    function saveUsers(u) { localStorage.setItem('hvac_users',JSON.stringify(u)); }
-    function getSession() { return JSON.parse(localStorage.getItem('hvac_session')||'null'); }
-    function saveSession(u) { localStorage.setItem('hvac_session',JSON.stringify(u)); }
-    function clearSession() { localStorage.removeItem('hvac_session'); }
 
-    function loginUser(username, password) {
-        var users = getUsers();
-        for (var i=0;i<users.length;i++) {
-            if (users[i].username===username && users[i].password===password) {
-                currentUser = users[i];
-                saveSession(users[i]);
+    function loginUser(email, password) {
+        return authFirebase.signInWithEmailAndPassword(email, password).then(function(cred) {
+            return dbFirebase.collection('usuarios').doc(cred.user.uid).get().then(function(doc) {
+                if (doc.exists) {
+                    currentUser = { email: cred.user.email, uid: cred.user.uid, role: doc.data().role || 'tecnico' };
+                } else {
+                    currentUser = { email: cred.user.email, uid: cred.user.uid, role: 'tecnico' };
+                }
                 updateUserBar();
                 document.body.classList.add('logged-in');
                 return true;
-            }
-        }
-        return false;
+            });
+        }).catch(function(err) {
+            throw err;
+        });
     }
 
-    function registerUser(username, password, role) {
-        var users = getUsers();
-        for (var i=0;i<users.length;i++) { if (users[i].username===username) return false; }
-        var newUser = { username:username, password:password, role:role || 'tecnico' };
-        users.push(newUser);
-        saveUsers(users);
-        return true;
+    function registerUser(email, password, role) {
+        return authFirebase.createUserWithEmailAndPassword(email, password).then(function(cred) {
+            return dbFirebase.collection('usuarios').doc(cred.user.uid).set({
+                email: email,
+                role: role || 'tecnico',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).then(function() {
+                currentUser = { email: cred.user.email, uid: cred.user.uid, role: role || 'tecnico' };
+                updateUserBar();
+                document.body.classList.add('logged-in');
+                return true;
+            });
+        }).catch(function(err) {
+            throw err;
+        });
     }
 
     function logoutUser() {
-        currentUser = null;
-        clearSession();
-        document.body.classList.remove('logged-in');
-        showLoginView();
+        authFirebase.signOut().then(function() {
+            currentUser = null;
+            document.body.classList.remove('logged-in');
+            showLoginView();
+        });
     }
 
     function updateUserBar() {
         if (!currentUser) return;
-        document.getElementById('displayName').textContent = currentUser.username;
+        document.getElementById('displayName').textContent = currentUser.email;
         document.getElementById('displayRole').textContent = currentUser.role==='admin' ? 'ADMIN' : 'TECNICO';
         var delBtn = document.getElementById('deleteAllBtn');
         if (delBtn) delBtn.style.display = currentUser.role==='admin' ? '' : 'none';
     }
 
+    authFirebase.onAuthStateChanged(function(user) {
+        if (user) {
+            dbFirebase.collection('usuarios').doc(user.uid).get().then(function(doc) {
+                if (doc.exists) {
+                    currentUser = { email: user.email, uid: user.uid, role: doc.data().role || 'tecnico' };
+                } else {
+                    currentUser = { email: user.email, uid: user.uid, role: 'tecnico' };
+                }
+                updateUserBar();
+                document.body.classList.add('logged-in');
+            });
+        } else {
+            currentUser = null;
+            document.body.classList.remove('logged-in');
+            showLoginView();
+        }
+    });
+
     function showLoginView() { document.getElementById('loginFormView').style.display=''; document.getElementById('registerFormView').style.display='none'; document.getElementById('loginError').style.display='none'; document.getElementById('loginUser').value=''; document.getElementById('loginPass').value=''; }
     function showRegisterView() { document.getElementById('loginFormView').style.display='none'; document.getElementById('registerFormView').style.display=''; document.getElementById('regError').style.display='none'; document.getElementById('regUser').value=''; document.getElementById('regPass').value=''; document.getElementById('regPass2').value=''; }
 
     function isAdmin() { return currentUser && currentUser.role==='admin'; }
-    var db = null;
-
-    function abrirDB(callback) {
-        if (db) { callback(null); return; }
-        var req = indexedDB.open(DB_NAME, DB_VERSION);
-        req.onupgradeneeded = function(e) {
-            var d = e.target.result;
-            if (!d.objectStoreNames.contains(STORE_NAME)) {
-                var store = d.createObjectStore(STORE_NAME, { keyPath: 'id' });
-                store.createIndex('fecha', 'fecha', { unique: false });
-            }
-        };
-        req.onsuccess = function(e) {
-            db = e.target.result;
-            callback(null);
-        };
-        req.onerror = function() {
-            callback('Error al abrir la base de datos');
-        };
-    }
 
     function guardarRegistro(registro, callback) {
-        abrirDB(function(err) {
-            if (err) { callback(err); return; }
-            var tx = db.transaction(STORE_NAME, 'readwrite');
-            var store = tx.objectStore(STORE_NAME);
-            store.put(registro);
-            tx.oncomplete = function() { callback(null); };
-            tx.onerror = function() { callback('Error al guardar el registro'); };
+        registro.createdBy = currentUser ? currentUser.email : 'unknown';
+        registro.createdAt = new Date().toISOString();
+        dbFirebase.collection('registros').add(registro).then(function() {
+            callback(null);
+        }).catch(function(err) {
+            callback('Error al guardar: ' + err.message);
         });
     }
 
     function obtenerRegistros(callback) {
-        abrirDB(function(err) {
-            if (err) { callback(err, []); return; }
-            var tx = db.transaction(STORE_NAME, 'readonly');
-            var store = tx.objectStore(STORE_NAME);
-            var req = store.getAll();
-            req.onsuccess = function() { callback(null, req.result || []); };
-            req.onerror = function() { callback('Error al obtener registros', []); };
+        dbFirebase.collection('registros').orderBy('fecha', 'desc').get().then(function(querySnapshot) {
+            var regs = [];
+            querySnapshot.forEach(function(doc) {
+                var r = doc.data();
+                r.id = doc.id;
+                regs.push(r);
+            });
+            callback(null, regs);
+        }).catch(function(err) {
+            callback('Error al obtener registros: ' + err.message, []);
         });
     }
 
     function eliminarRegistro(id, callback) {
-        abrirDB(function(err) {
-            if (err) { callback(err); return; }
-            var tx = db.transaction(STORE_NAME, 'readwrite');
-            var store = tx.objectStore(STORE_NAME);
-            store.delete(id);
-            tx.oncomplete = function() { callback(null); };
-            tx.onerror = function() { callback('Error al eliminar'); };
+        dbFirebase.collection('registros').doc(id).delete().then(function() {
+            callback(null);
+        }).catch(function(err) {
+            callback('Error al eliminar: ' + err.message);
         });
     }
 
     function eliminarTodos(callback) {
-        abrirDB(function(err) {
-            if (err) { callback(err); return; }
-            var tx = db.transaction(STORE_NAME, 'readwrite');
-            var store = tx.objectStore(STORE_NAME);
-            store.clear();
-            tx.oncomplete = function() { callback(null); };
-            tx.onerror = function() { callback('Error al eliminar'); };
+        dbFirebase.collection('registros').get().then(function(querySnapshot) {
+            var batch = dbFirebase.batch();
+            querySnapshot.forEach(function(doc) {
+                batch.delete(doc.ref);
+            });
+            return batch.commit();
+        }).then(function() {
+            callback(null);
+        }).catch(function(err) {
+            callback('Error al eliminar: ' + err.message);
         });
     }
 
@@ -798,7 +816,7 @@ var HVACApp = (function() {
 
         document.querySelectorAll('.btn-word').forEach(function(b) {
             b.addEventListener('click', function() {
-                var id = Number(this.dataset.id);
+                var id = this.dataset.id;
                 obtenerRegistros(function(err, regs) {
                     if (err) return;
                     var encontrado = null;
@@ -812,7 +830,7 @@ var HVACApp = (function() {
 
         document.querySelectorAll('.btn-delete').forEach(function(b) {
             b.addEventListener('click', function() {
-                var id = Number(this.dataset.id);
+                var id = this.dataset.id;
                 if (confirm('\u00bfEliminar este registro?')) {
                     eliminarRegistro(id, function() { cargarYRenderizar(); });
                 }
@@ -1105,20 +1123,14 @@ var HVACApp = (function() {
     }
 
     function init() {
-        var session = getSession();
-        if (session && session.username) {
-            currentUser = session;
-            document.body.classList.add('logged-in');
-            updateUserBar();
-        }
-
         document.getElementById('loginBtn').addEventListener('click', function() {
             var u = document.getElementById('loginUser').value.trim();
             var p = document.getElementById('loginPass').value.trim();
             var err = document.getElementById('loginError');
             if (!u || !p) { err.textContent='Complete todos los campos'; err.style.display=''; return; }
-            if (loginUser(u,p)) { err.style.display='none'; }
-            else { err.textContent='Usuario o contrase\u00f1a incorrectos'; err.style.display=''; }
+            loginUser(u,p).then(function() { err.style.display='none'; }).catch(function(e) {
+                err.textContent='Correo o contrase\u00f1a incorrectos'; err.style.display='';
+            });
         });
         document.getElementById('loginPass').addEventListener('keydown', function(e) { if (e.keyCode===13) document.getElementById('loginBtn').click(); });
         document.getElementById('showRegisterLink').addEventListener('click', showRegisterView);
@@ -1132,10 +1144,13 @@ var HVACApp = (function() {
             if (p!==p2) { err.textContent='LAS CONTRASE\u00d1AS NO COINCIDEN'; err.style.display=''; return; }
             if (p.length<4) { err.textContent='LA CONTRASE\u00d1A DEBE TENER AL MENOS 4 CARACTERES'; err.style.display=''; return; }
             var role = document.getElementById('roleAdmin').classList.contains('active') ? 'admin' : 'tecnico';
-            if (!registerUser(u,p,role)) { err.textContent='El usuario ya existe'; err.style.display=''; return; }
-            err.style.display='none';
-            loginUser(u,p);
-            showLoginView();
+            registerUser(u,p,role).then(function() {
+                err.style.display='none';
+            }).catch(function(e) {
+                if (e.code==='auth/email-already-in-use') err.textContent='El correo ya est\u00e1 registrado';
+                else err.textContent='Error: ' + e.message;
+                err.style.display='';
+            });
         });
         document.getElementById('regPass2').addEventListener('keydown', function(e) { if (e.keyCode===13) document.getElementById('registerBtn').click(); });
         document.getElementById('roleAdmin').addEventListener('click', function() { this.classList.add('active'); document.getElementById('RoleTecnico').classList.remove('active'); });
@@ -1169,7 +1184,6 @@ var HVACApp = (function() {
             if (!validarFotos()) { alert('Debe agregar 3 fotos en cada etapa'); return; }
 
             var registro = {
-                id: Date.now(),
                 sala: sala,
                 equipo: equipo,
                 descripciones: {
