@@ -663,8 +663,19 @@ var HVACApp = (function() {
                             var slot = input.parentElement;
                             var reader = new FileReader();
                             reader.onload = function(e) {
-                                fotosData[phase][idx] = e.target.result;
-                                mostrarPreview(slot, phase, idx);
+                                var img = new Image();
+                                img.onload = function() {
+                                    var maxW = 1024, maxH = 768;
+                                    var w = img.width, h = img.height;
+                                    if (w > maxW) { h = h * maxW / w; w = maxW; }
+                                    if (h > maxH) { w = w * maxH / h; h = maxH; }
+                                    var c = document.createElement('canvas');
+                                    c.width = w; c.height = h;
+                                    c.getContext('2d').drawImage(img, 0, 0, w, h);
+                                    fotosData[phase][idx] = c.toDataURL('image/jpeg', 0.7);
+                                    mostrarPreview(slot, phase, idx);
+                                };
+                                img.src = e.target.result;
                             };
                             reader.onerror = function() {};
                             reader.readAsDataURL(file);
